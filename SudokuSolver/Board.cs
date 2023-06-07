@@ -8,14 +8,18 @@ namespace SudokuSolver
 {
     public class Board
     {
-        public SudokuValues[][] SudokuBoard 
+        private SudokuValues[][] _sudokuBoard;
+        public IList<IList<SudokuValues>> SudokuBoard 
         { 
-            get; 
+            get => Array.AsReadOnly<IList<SudokuValues>>(_sudokuBoard.Select(i => Array.AsReadOnly(i)).ToArray()); 
         }
+        
+        public int ValueLength { get; }
 
         public Board(int[][] sudokuBoard) 
         {
-            SudokuBoard = sudokuBoard.Select(i => i.Select(x => BoardCodeParser.GetSudokuValues(x)).ToArray()).ToArray();
+            _sudokuBoard = sudokuBoard.Select(i => i.Select(x => BoardCodeParser.GetSudokuValues(x)).ToArray()).ToArray();
+            ValueLength = Enum.GetValues<SudokuValues>().Where(i => i != SudokuValues.Empty).Count();
         }
 
         private bool? isValidBoard;
@@ -24,15 +28,15 @@ namespace SudokuSolver
             get
             {
                 if (!isValidBoard.HasValue)
-                    isValidBoard = ValidateBoard(SudokuBoard);
+                    isValidBoard = ValidateBoard(_sudokuBoard);
                 return isValidBoard.Value;
             }
         }
 
-        public SudokuValues[] GetColumn(int col) => SudokuBoard.Select(row => row[col]).ToArray();
+        public SudokuValues[] GetColumn(int col) => _sudokuBoard.Select(row => row[col]).ToArray();
         private SudokuValues[] GetArea((int start, int end) rowDimensions, (int start, int end) colDimensions)
         {
-            SudokuValues[] square = SudokuBoard
+            SudokuValues[] square = _sudokuBoard
                 .Where((row, i) => i >= rowDimensions.start && i < rowDimensions.end)
                 .SelectMany(row => row.Where((col, x) => x >= colDimensions.start && x < colDimensions.end)).ToArray();
             return square;
@@ -44,14 +48,14 @@ namespace SudokuSolver
                 0 => (0, 3),
                 1 => (3, 6),
                 2 => (6, 9),
-                _ => throw new ArgumentException(paramName: nameof(valuePosition), message: "Position needs to be in 3x3 square")
+                _ => throw new ArgumentOutOfRangeException(paramName: nameof(valuePosition.row), message: "Unknown row position!", actualValue: valuePosition.row)
             };
             var colSquare = (valuePosition.col / 3) switch
             {
                 0 => (0, 3),
                 1 => (3, 6),
                 2 => (6, 9),
-                _ => throw new ArgumentException(paramName: nameof(valuePosition), message: "Position needs to be in 3x3 square")
+                _ => throw new ArgumentOutOfRangeException(paramName: nameof(valuePosition.col), message: "Unknown column position!", actualValue: valuePosition.col)
             };
 
             return GetArea(rowSquare, colSquare);
@@ -59,12 +63,12 @@ namespace SudokuSolver
 
         public bool NotInRow(int row, SudokuValues sudokuValue) 
         {
-            int count = SudokuBoard[row].Count(i => i == sudokuValue);
+            int count = _sudokuBoard[row].Count(i => i == sudokuValue);
             return count switch
             {
                 0 => true,
                 1 => false,
-                _ => throw new ArgumentException(paramName: nameof(sudokuValue), message: "Invalid Board!")
+                _ => throw new ArgumentOutOfRangeException(paramName: nameof(sudokuValue), message: "Value appears more than once!", actualValue: sudokuValue)
             };
         }
 
@@ -75,7 +79,7 @@ namespace SudokuSolver
             {
                 0 => true,
                 1 => false,
-                _ => throw new ArgumentException(paramName: nameof(sudokuValue), message: "Invalid Board!")
+                _ => throw new ArgumentOutOfRangeException(paramName: nameof(sudokuValue), message: "Value appears more than once!", actualValue: sudokuValue)
             };
         }
 
@@ -86,7 +90,7 @@ namespace SudokuSolver
             {
                 0 => true,
                 1 => false,
-                _ => throw new ArgumentException(paramName: nameof(sudokuValue), message: "Invalid Board!")
+                _ => throw new ArgumentOutOfRangeException(paramName: nameof(sudokuValue), message: "Value appears more than once!", actualValue: sudokuValue)
             };
         }
 
@@ -96,17 +100,19 @@ namespace SudokuSolver
 
         public bool ValidateBoard(SudokuValues[][] board)
         {
+            if (board.SelectMany(i => i).Count() != (ValueLength * ValueLength))
+            {
+                throw new ArgumentOutOfRangeException(paramName: nameof(board), message: "Invalid board!");
+            }
             for (int i = 0; i < board.Length; i++)
             {
                 SudokuValues[] row = board[i];
                 for (int x = 0; x < row.Length; x++)
                 {
-                    SudokuValues value = board[i][x];
+                    SudokuValues value = BoardCodeParser.GetSudokuValues((int)board[i][x]);
                     if (value == SudokuValues.Empty) continue;
 
-                    if (Enum.IsDefined(value) == false)
-                        return false;
-                    ValidPosition((i, x), value);
+                    _ = NotInRow(i, value) & NotInColumn(x, value) & NotInSquare((x, i), value);
                 }
             }
 
@@ -115,14 +121,14 @@ namespace SudokuSolver
 
         public bool IsBoardSolved()
         {
-            return SudokuBoard.Any(i => i.Any(x => x == SudokuValues.Empty)) == false;
+            return _sudokuBoard.Any(i => i.Any(x => x == SudokuValues.Empty)) == false;
         }
 
         public bool Solve()
         {
             if (IsValidBoard)
             {
-                TrySolve(SudokuBoard, 1);
+                TrySolve(_sudokuBoard, 1);
                 return IsBoardSolved();
             }
             return false;
@@ -145,14 +151,14 @@ namespace SudokuSolver
                     }
                 }
 
-                if (currentNumber + 1 > boardToFill.Length)
+                if (currentNumber + 1 > ValueLength)
                 {
                     return false;
                 }
 
                 TrySolve(boardToFill, ++currentNumber);
 
-                if (boardToFill.Any(i => i.Any(x => x == SudokuValues.Empty)))
+                if (IsBoardSolved() == false)
                 {
                     return false;
                 }

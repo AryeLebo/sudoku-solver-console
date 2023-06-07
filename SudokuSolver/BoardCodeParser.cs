@@ -10,6 +10,6 @@ namespace SudokuSolver
     {
         public static SudokuValues GetSudokuValues(int value) => Enum.IsDefined((SudokuValues)value) 
             ? (SudokuValues)value 
-            : throw new ArgumentException(paramName: nameof(value), message: "Invalid Sudoku Value");
+            : throw new ArgumentOutOfRangeException(paramName: nameof(value), message: $"Invalid sudoku value", actualValue: value);
     }
 }
